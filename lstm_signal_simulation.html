@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LSTM 발전량 예측기 신호전송 시뮬레이션 v12</title>
+<style>
+:root{--bg:#020617;--panel:#0f172a;--text:#e5e7eb;--muted:#94a3b8;--cyan:#38bdf8;--green:#22c55e;--purple:#a78bfa;--orange:#f59e0b;--yellow:#facc15;}
+*{box-sizing:border-box;}
+body{margin:0;min-height:100vh;background:radial-gradient(circle at top left, rgba(56,189,248,.13), transparent 34%),radial-gradient(circle at top right, rgba(167,139,250,.11), transparent 32%),linear-gradient(180deg,#0f172a 0%,#020617 100%);color:var(--text);font-family:"Segoe UI","Noto Sans KR",Arial,sans-serif;}
+header{padding:22px 28px 14px;border-bottom:1px solid rgba(148,163,184,.18);}
+h1{margin:0;font-size:32px;letter-spacing:-0.04em;line-height:1.2;}
+.subtitle{margin-top:10px;color:var(--muted);font-size:17px;line-height:1.65;}
+.toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:15px 28px;background:rgba(2,6,23,.72);border-bottom:1px solid rgba(148,163,184,.18);position:sticky;top:0;z-index:50;backdrop-filter:blur(10px);}
+button{border:1px solid rgba(56,189,248,.58);background:rgba(14,165,233,.12);color:#e0f2fe;border-radius:11px;padding:11px 17px;font-size:16px;cursor:pointer;}
+button:hover{background:rgba(14,165,233,.22);}
+button.secondary{border-color:rgba(148,163,184,.42);background:rgba(148,163,184,.08);color:var(--text);}
+.speed{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:16px;margin-left:8px;}
+input[type="range"]{width:140px;}
+main{padding:20px 28px 30px;}
+.stage-info{display:grid;grid-template-columns:220px minmax(620px,1fr) 540px;gap:18px;align-items:stretch;margin-bottom:22px;}
+.stage-card{background:rgba(15,23,42,.92);border:1px solid rgba(148,163,184,.20);border-radius:16px;padding:20px 22px;box-shadow:0 16px 32px rgba(0,0,0,.23);min-height:112px;}
+.stage-number{color:var(--muted);font-size:18px;margin-bottom:10px;font-weight:700;letter-spacing:.02em;}
+.stage-title{font-size:29px;font-weight:900;letter-spacing:-0.045em;line-height:1.22;}
+.stage-desc{color:#dbe4f0;line-height:1.72;font-size:21px;font-weight:600;word-break:keep-all;overflow-wrap:break-word;}
+.metrics{display:grid;gap:10px;font-size:16px;}
+.metric-row{display:flex;justify-content:space-between;gap:14px;padding-bottom:8px;border-bottom:1px dashed rgba(148,163,184,.22);line-height:1.35;}
+.metric-row span:first-child{color:var(--muted);}
+.diagram-shell{overflow-x:auto;overflow-y:hidden;padding-bottom:10px;scroll-behavior:smooth;border-radius:18px;}
+.canvas{position:relative;width:2350px;height:1360px;min-width:2350px;background:rgba(2,6,23,.55);border:1px solid rgba(148,163,184,.18);border-radius:18px;overflow:hidden;box-shadow:inset 0 0 70px rgba(15,23,42,.86);}
+.grid{position:absolute;inset:0;background-image:linear-gradient(rgba(148,163,184,.055) 1px, transparent 1px),linear-gradient(90deg, rgba(148,163,184,.055) 1px, transparent 1px);background-size:40px 40px;}
+.lane{position:absolute;left:30px;right:30px;height:1px;border-top:1px solid rgba(148,163,184,.13);}
+.lane-label{position:absolute;left:38px;color:#64748b;font-size:12px;letter-spacing:.03em;}
+svg.lines{position:absolute;inset:0;width:2350px;height:1360px;pointer-events:none;z-index:2;}
+.path{stroke:rgba(148,163,184,.48);stroke-width:2.4;fill:none;stroke-dasharray:8 7;}
+.path.active{stroke:var(--cyan);stroke-width:3.5;filter:drop-shadow(0 0 7px rgba(56,189,248,.75));}
+.arrow{fill:rgba(148,163,184,.60);}
+.arrow.active{fill:var(--cyan);filter:drop-shadow(0 0 5px rgba(56,189,248,.75));}
+.block,.feature-panel,.sequence-panel,.lstm-gate{position:absolute;z-index:4;border-radius:16px;background:linear-gradient(180deg, rgba(30,41,59,.98), rgba(15,23,42,.98));border:1px solid rgba(148,163,184,.30);box-shadow:0 16px 30px rgba(0,0,0,.28);transition:transform .25s ease,border-color .25s ease,box-shadow .25s ease,background .25s ease;padding:15px;}
+.block.active,.feature-panel.active,.sequence-panel.active,.lstm-gate.active{transform:translateY(-4px) scale(1.02);border-color:rgba(56,189,248,.96);box-shadow:0 0 0 1px rgba(56,189,248,.32),0 0 34px rgba(56,189,248,.26),0 16px 30px rgba(0,0,0,.30);background:linear-gradient(180deg, rgba(8,47,73,.99), rgba(15,23,42,.99));}
+.block.done,.feature-panel.done,.sequence-panel.done,.lstm-gate.done{border-color:rgba(34,197,94,.56);}
+.block-title{font-size:16px;font-weight:800;letter-spacing:-0.035em;margin-bottom:8px;}
+.block-body{color:#cbd5e1;font-size:13px;line-height:1.5;}
+.tag{display:inline-block;margin-top:9px;padding:4px 8px;border-radius:999px;color:#bfdbfe;background:rgba(59,130,246,.18);border:1px solid rgba(96,165,250,.22);font-size:11px;}
+.status-badge{display:none;position:absolute;right:14px;bottom:12px;padding:5px 8px;border-radius:999px;background:rgba(34,197,94,.16);border:1px solid rgba(34,197,94,.45);color:#dcfce7;font-size:11px;}
+.status-badge.show{display:block;}
+.join-conditions{display:none;margin-top:10px;padding:10px 12px;border-radius:12px;background:rgba(8,47,73,.55);border:1px solid rgba(56,189,248,.25);font-size:12px;line-height:1.45;color:#dbeafe;}
+.join-conditions.show{display:block;}
+.feature-list{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px;}
+.feature{padding:8px 7px;border-radius:9px;background:rgba(51,65,85,.80);border:1px solid rgba(148,163,184,.20);color:#cbd5e1;text-align:center;font-size:12px;display:flex;flex-direction:column;gap:2px;}
+.feature.active{background:rgba(34,197,94,.23);border-color:rgba(34,197,94,.62);color:#dcfce7;}
+.f-name{font-weight:700;}
+.f-key{font-size:10px;color:#94a3b8;}
+.f-val{font-size:13px;color:#e2e8f0;}
+.vector-preview{margin-top:10px;padding:8px 10px;border-radius:10px;background:rgba(8,47,73,.55);border:1px solid rgba(56,189,248,.30);font-size:12px;color:#dbeafe;}
+.sequence-head{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.sequence-title{color:var(--muted);font-size:12px;margin:2px 0 11px;}
+.sequence-counter{padding:5px 10px;border-radius:999px;background:rgba(56,189,248,.18);border:1px solid rgba(56,189,248,.30);font-size:12px;color:#e0f2fe;white-space:nowrap;}
+.sequence-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:7px;}
+.seq-cell{height:26px;border-radius:7px;background:rgba(51,65,85,.82);border:1px solid rgba(148,163,184,.18);color:#cbd5e1;display:flex;align-items:center;justify-content:center;font-size:10px;transition:background .2s ease,border-color .2s ease,color .2s ease;}
+.seq-cell.fill{background:rgba(56,189,248,.28);border-color:rgba(56,189,248,.62);color:#e0f2fe;}
+.shape-note{margin-top:10px;font-size:12px;color:#bfdbfe;}
+.gate{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px dashed rgba(148,163,184,.16);font-size:12px;opacity:.55;}
+.gate.active{opacity:1;color:#e0f2fe;}
+.gate span:first-child{color:var(--muted);}
+.gate.active span:first-child{color:#e0f2fe;}
+.bar{width:90px;height:7px;border-radius:999px;background:rgba(51,65,85,.95);overflow:hidden;}
+.bar>i{display:block;width:0%;height:100%;border-radius:999px;background:var(--cyan);transition:width .55s ease;}
+.bar.on>i{width:78%;}
+.gate-note{margin-top:10px;font-size:12px;color:#cbd5e1;line-height:1.45;}
+.result-grid{display:grid;gap:6px;margin-top:4px;}
+.result-row{display:flex;justify-content:space-between;gap:10px;padding-bottom:5px;border-bottom:1px dashed rgba(148,163,184,.18);font-size:13px;}
+.result-row span{color:#cbd5e1;}
+.result-row b{color:#f8fafc;}
+.mini-bars{margin-top:10px;display:grid;gap:6px;}
+.mini-bar-row{display:grid;grid-template-columns:40px 1fr;gap:8px;align-items:center;font-size:12px;color:#cbd5e1;}
+.mini-bar{height:10px;border-radius:999px;background:rgba(51,65,85,.95);overflow:hidden;}
+.mini-bar i{display:block;height:100%;width:0%;background:var(--cyan);transition:width .7s ease;}
+#actualBar{background:var(--green);}
+.compare-box{margin-top:10px;padding:10px 12px;border-radius:12px;background:rgba(8,47,73,.55);border:1px solid rgba(56,189,248,.25);font-size:12px;line-height:1.45;color:#dbeafe;}
+.packet{position:absolute;z-index:11;width:18px;height:18px;border-radius:50%;transform:translate(-50%,-50%);opacity:0;}
+.packet.show{opacity:1;}
+.packet.merge-out{opacity:0;transform:translate(-50%,-50%) scale(.28);transition:opacity 280ms ease,transform 280ms ease;}
+.packet.merge-in-start{opacity:0;transform:translate(-50%,-50%) scale(.35);transition:opacity 280ms ease,transform 280ms ease;}
+.packet.merge-in-final{opacity:1;transform:translate(-50%,-50%) scale(1.12);transition:opacity 280ms ease,transform 280ms ease;}
+
+.packet.weather{background:var(--cyan);box-shadow:0 0 16px rgba(56,189,248,.92),0 0 34px rgba(56,189,248,.44);}
+.packet.power{background:var(--purple);box-shadow:0 0 16px rgba(167,139,250,.92),0 0 34px rgba(167,139,250,.44);}
+.packet.joined{background:var(--green);box-shadow:0 0 16px rgba(34,197,94,.92),0 0 34px rgba(34,197,94,.44);}
+.packet.vector{background:var(--green);box-shadow:0 0 16px rgba(34,197,94,.92),0 0 34px rgba(34,197,94,.44);}
+.packet.sequence{background:var(--orange);box-shadow:0 0 16px rgba(245,158,11,.92),0 0 34px rgba(245,158,11,.44);}
+.packet.pred{background:var(--yellow);box-shadow:0 0 16px rgba(250,204,21,.92),0 0 34px rgba(250,204,21,.44);}
+.packet-label{position:absolute;z-index:12;transform:translate(-50%,-135%);padding:7px 10px;border-radius:10px;background:rgba(15,23,42,.96);border:1px solid rgba(56,189,248,.35);color:#e0f2fe;font-size:12px;white-space:nowrap;box-shadow:0 10px 24px rgba(0,0,0,.28);opacity:0;}
+.packet-label.show{opacity:1;}
+.summary-card{margin:18px 0 0;padding:16px 18px;border:1px solid rgba(148,163,184,.22);border-radius:16px;background:rgba(2,6,23,.68);color:#cbd5e1;font-size:13px;line-height:1.58;box-shadow:0 16px 32px rgba(0,0,0,.18);}
+.summary-card b{color:#e0f2fe;}
+.summary-card .summary-title{font-size:15px;font-weight:800;color:#e5e7eb;margin-bottom:6px;letter-spacing:-0.025em;}
+.footer-note{color:var(--muted);font-size:12px;margin-top:13px;line-height:1.5;}
+@media (max-width:1280px){.stage-info{grid-template-columns:1fr;}.stage-card{min-height:auto;}.stage-desc{font-size:19px;}.stage-title{font-size:27px;}}
+</style>
+</head>
+<body>
+<header>
+  <h1>LSTM 발전량 예측기 — 신호전송 시뮬레이션 v12</h1>
+  <div class="subtitle">ROUTES 기반 경로 일치 구조, Time Join / Feature Vector 단계 분리, LSTM Gate static 구조는 유지하고, 상단 단계 설명 영역을 발표용으로 키운 버전이다.</div>
+</header>
+<div class="toolbar">
+  <button id="playBtn">자동 재생</button>
+  <button id="nextBtn" class="secondary">다음 단계</button>
+  <button id="prevBtn" class="secondary">이전 단계</button>
+  <button id="resetBtn" class="secondary">처음부터</button>
+  <div class="speed">속도 <input id="speedRange" type="range" min="0.6" max="1.8" step="0.1" value="1" /><span id="speedLabel">1.0x</span></div>
+</div>
+<main>
+<section class="stage-info">
+  <div class="stage-card"><div class="stage-number" id="stageNumber">STEP 1 / 10</div><div class="stage-title" id="stageTitle">기상 데이터 수집</div></div>
+  <div class="stage-card stage-desc" id="stageDesc">Weather API에서 weatherPacket이 생성되어 weather_hourly에 저장된다.</div>
+  <div class="stage-card metrics">
+    <div class="metric-row"><span>경로 단일 소스</span><b>ROUTES 객체</b></div>
+    <div class="metric-row"><span>SVG 점선</span><b>routeToPath(ROUTES)</b></div>
+    <div class="metric-row"><span>패킷 애니메이션</span><b>동일 ROUTES 사용</b></div>
+    <div class="metric-row"><span>이동 원형</span><b>전송 중에만 표시</b></div>
+    <div class="metric-row"><span>평가</span><b>MAE / RMSE / Baseline</b></div>
+  </div>
+</section>
+<div class="diagram-shell" id="diagramShell">
+<section class="canvas" id="canvas">
+  <div class="grid"></div>
+  <div class="lane" style="top:70px;"></div>
+  <div class="lane" style="top:285px;"></div>
+  <div class="lane" style="top:525px;"></div>
+  <div class="lane" style="top:825px;"></div>
+  <div class="lane-label" style="top:42px;">1행: WEATHER DATA</div>
+  <div class="lane-label" style="top:258px;">2행: RP2040 / POWER DATA</div>
+  <div class="lane-label" style="top:498px;">3행: TIME JOIN / FEATURE VECTOR</div>
+  <div class="lane-label" style="top:798px;">4행: SEQUENCE / LSTM / OUTPUT / EVALUATION</div>
+
+  <svg class="lines" id="lineSvg" viewBox="0 0 2350 1360" preserveAspectRatio="none">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" class="arrow" /></marker>
+      <marker id="arrowActive" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" class="arrow active" /></marker>
+    </defs>
+    <g id="pathsLayer"></g>
+  </svg>
+
+  <div class="block" id="weatherApi" style="left:100px; top:95px; width:230px; min-height:110px;"><div class="block-title">Weather API</div><div class="block-body">공공 ASOS 또는 Open-Meteo<br>시간별 JSON 수집</div><span class="tag">source</span></div>
+<div class="block medium" id="weatherHourly" style="left:520px; top:95px; width:260px; min-height:135px;"><div class="block-title">weather_hourly</div><div class="block-body">obs_time 기준<br>기상 데이터 저장</div><span class="tag">1시간 1행</span>
+<div class="status-badge" id="weatherReady">weather row ready</div></div>
+<div class="block" id="rp2040" style="left:100px; top:315px; width:230px; min-height:110px;"><div class="block-title">RP2040</div><div class="block-body">Modbus register<br>발전량·패널 온습도</div><span class="tag">device</span></div>
+<div class="block medium" id="powerRealtime" style="left:520px; top:315px; width:260px; min-height:110px;"><div class="block-title">power_realtime</div><div class="block-body">실시간 측정값 저장<br>measured_at 기준</div><span class="tag">raw row</span>
+<div class="status-badge" id="realtimeReady">raw power row</div></div>
+<div class="block medium" id="powerHourly" style="left:940px; top:315px; width:260px; min-height:135px;"><div class="block-title">power_hourly</div><div class="block-body">1시간 평균 View<br>AVG(power_kw)</div><span class="tag">hour_time</span>
+<div class="status-badge" id="powerReady">power row ready</div></div>
+<div class="block wide" id="timeJoin" style="left:520px; top:560px; width:300px; min-height:180px;"><div class="block-title">Time Join</div><div class="block-body">weather_hourly.obs_time<br>power_hourly.hour_time 결합</div><span class="tag">INNER JOIN</span>
+<div class="join-conditions" id="joinConditions"><div><b>Join 조건</b></div><div>w.obs_time = p.hour_time</div><div>source = public</div><div>device_id = RP2040-EMU-01</div></div>
+<div class="status-badge" id="joinedReady">joined row created</div></div>
+<div class="feature-panel" id="featurePanel" style="left:970px; top:540px; width:430px; min-height:225px;"><div class="block-title">8개 Feature Vector</div>
+<div class="block-body">feature 이름과 예시 값을 함께 표시</div>
+<div class="vector-preview">[23.4, 61, 2.1, 0, 0, 2.04, 31.2, 55]</div>
+<div class="feature-list"><div class="feature"><span class="f-name">기온</span><span class="f-key">temperature</span><span class="f-val">23.4</span></div><div class="feature"><span class="f-name">습도</span><span class="f-key">humidity</span><span class="f-val">61</span></div><div class="feature"><span class="f-name">풍속</span><span class="f-key">wind_speed</span><span class="f-val">2.1</span></div><div class="feature"><span class="f-name">일사</span><span class="f-key">solar_radiation</span><span class="f-val">0</span></div><div class="feature"><span class="f-name">강수</span><span class="f-key">precipitation</span><span class="f-val">0</span></div><div class="feature"><span class="f-name">발전량</span><span class="f-key">power_kw</span><span class="f-val">2.04</span></div><div class="feature"><span class="f-name">패널온도</span><span class="f-key">panel_temp</span><span class="f-val">31.2</span></div><div class="feature"><span class="f-name">패널습도</span><span class="f-key">panel_humidity</span><span class="f-val">55</span></div></div>
+<div class="status-badge" id="vectorStatus">vector ready</div></div>
+<div class="sequence-panel" id="sequencePanel" style="left:100px; top:860px; width:580px; min-height:220px;"><div class="block-title">35시간 Sequence Buffer</div>
+<div class="sequence-head"><div class="sequence-title">t-35 ~ t-1, 각 칸은 1시간의 8-feature vector</div><div class="sequence-counter" id="sequenceCounter">0 / 35</div></div>
+<div class="sequence-grid" id="seqGrid"></div>
+<div class="shape-note">X shape = (35, 8)</div>
+<div class="status-badge" id="sequenceStatus">sequence ready</div></div>
+<div class="block wide" id="lstm" style="left:800px; top:860px; width:270px; min-height:120px;"><div class="block-title">LSTM(64)</div><div class="block-body">35 step 순차 처리<br>장기 기억 + hidden state</div><span class="tag">sequence model</span></div>
+<div class="lstm-gate" id="lstmGate" style="left:800px; top:1075px; width:270px; min-height:185px;"><div class="block-title">LSTM Gate</div>
+<div class="gate" data-gate="forget"><span>Forget Gate</span><div class="bar"><i></i></div></div>
+<div class="gate" data-gate="input"><span>Input Gate</span><div class="bar"><i></i></div></div>
+<div class="gate" data-gate="cell"><span>Cell State</span><div class="bar"><i></i></div></div>
+<div class="gate" data-gate="output"><span>Output Gate</span><div class="bar"><i></i></div></div>
+<div class="gate-note" id="gateNote">Gate가 순서대로 활성화되며 장기 기억을 유지한다.</div></div>
+<div class="block medium" id="dense" style="left:1200px; top:860px; width:260px; min-height:120px;"><div class="block-title">Dense(1)</div><div class="block-body">최종 hidden state를<br>예측값 1개로 변환</div><span class="tag">regression</span></div>
+<div class="block output" id="prediction" style="left:1590px; top:860px; width:310px; min-height:180px;"><div class="block-title">Prediction Result</div>
+<div class="result-grid">
+<div class="result-row"><span>Predicted power_kw</span><b id="predValue">-</b></div>
+<div class="result-row"><span>Actual power_kw</span><b id="actualValue">-</b></div>
+<div class="result-row"><span>Error</span><b id="errorValue">-</b></div>
+</div>
+<div class="mini-bars">
+<div class="mini-bar-row"><span>Pred</span><div class="mini-bar"><i id="predBar"></i></div></div>
+<div class="mini-bar-row"><span>Actual</span><div class="mini-bar"><i id="actualBar"></i></div></div>
+</div></div>
+<div class="block output" id="evaluation" style="left:2000px; top:860px; width:310px; min-height:210px;"><div class="block-title">Evaluation</div>
+<div class="result-grid">
+<div class="result-row"><span>MAE</span><b id="maeValue">-</b></div>
+<div class="result-row"><span>RMSE</span><b id="rmseValue">-</b></div>
+<div class="result-row"><span>Baseline MAE</span><b id="baselineValue">-</b></div>
+<div class="result-row"><span>LSTM 개선율</span><b id="improveValue">-</b></div>
+</div>
+<div class="compare-box" id="compareBox">Baseline 대비 LSTM이 더 낮은 오차를 보인다.</div></div>
+
+  <div class="packet weather" id="packetWeather"></div><div class="packet-label" id="labelWeather"></div>
+  <div class="packet power" id="packetPower"></div><div class="packet-label" id="labelPower"></div>
+  <div class="packet joined" id="packetJoined"></div><div class="packet-label" id="labelJoined"></div>
+  <div class="packet vector" id="packetVector"></div><div class="packet-label" id="labelVector"></div>
+  <div class="packet sequence" id="packetSequence"></div><div class="packet-label" id="labelSequence"></div>
+  <div class="packet pred" id="packetPred"></div><div class="packet-label" id="labelPred"></div>
+</section>
+</div>
+
+<div class="summary-card">
+  <div class="summary-title">정리</div>
+  <div><b>정리:</b> Weather API + RP2040 데이터를 시간 기준으로 결합한 뒤, <b>8개 feature</b>를 만들고 <b>35시간 길이의 시퀀스</b>로 묶어 <b>LSTM(64) → Dense(1)</b> 구조로 다음 시점의 <b>power_kw</b>를 예측한다.</div>
+</div>
+
+<div class="footer-note">v12 핵심: 상단 STEP 번호, 단계 제목, 단계 설명, metrics, 버튼 글씨를 발표 화면 기준으로 키워 가독성을 개선했다.</div>
+</main>
+<script>
+const BLOCK_POSITIONS = {"weatherApi": {"x": 100, "y": 95, "w": 230, "h": 110}, "weatherHourly": {"x": 520, "y": 95, "w": 260, "h": 135}, "rp2040": {"x": 100, "y": 315, "w": 230, "h": 110}, "powerRealtime": {"x": 520, "y": 315, "w": 260, "h": 110}, "powerHourly": {"x": 940, "y": 315, "w": 260, "h": 135}, "timeJoin": {"x": 520, "y": 560, "w": 300, "h": 180}, "featurePanel": {"x": 970, "y": 540, "w": 430, "h": 225}, "sequencePanel": {"x": 100, "y": 860, "w": 580, "h": 220}, "lstm": {"x": 800, "y": 860, "w": 270, "h": 120}, "lstmGate": {"x": 800, "y": 1075, "w": 270, "h": 185}, "dense": {"x": 1200, "y": 860, "w": 260, "h": 120}, "prediction": {"x": 1590, "y": 860, "w": 310, "h": 180}, "evaluation": {"x": 2000, "y": 860, "w": 310, "h": 210}};
+const STAGES = [{"title": "기상 데이터 수집", "desc": "Weather API에서 weatherPacket이 생성되어 weather_hourly에 저장된다.", "active": ["weatherApi", "weatherHourly"], "routes": ["weatherToHourly"], "center": ["weatherApi", "weatherHourly"]}, {"title": "RP2040 Modbus 측정", "desc": "RP2040에서 powerPacket이 생성되어 power_realtime에 저장된다.", "active": ["rp2040", "powerRealtime"], "routes": ["rp2040ToRealtime"], "center": ["rp2040", "powerRealtime"]}, {"title": "실시간 발전량을 시간 평균으로 변환", "desc": "powerPacket이 power_realtime에서 power_hourly로 이동한다.", "active": ["powerRealtime", "powerHourly"], "routes": ["realtimeToHourly"], "center": ["powerRealtime", "powerHourly"]}, {"title": "Time Join: 두 데이터 병합", "desc": "weatherPacket과 powerPacket이 같은 MERGE_POINT에 도착한 뒤 joinedPacket으로 병합되고, joined row created 상태만 남긴다. Feature Vector 방향 이동은 다음 단계에서 실행한다.", "active": ["weatherHourly", "powerHourly", "timeJoin"], "routes": ["weatherToJoin", "powerToJoin"], "center": ["weatherHourly", "powerHourly", "timeJoin"]}, {"title": "8개 Feature Vector 생성", "desc": "joinedPacket이 MERGE_POINT에서 시작해 Feature Vector 블록으로 이동하고, 8개 feature vector로 변환된다.", "active": ["timeJoin", "featurePanel"], "routes": ["joinToFeature"], "center": ["timeJoin", "featurePanel"]}, {"title": "35시간 Sequence Buffer 구성", "desc": "vector가 35시간 Sequence Buffer에 순차적으로 누적된다.", "active": ["featurePanel", "sequencePanel"], "routes": ["featureToSequence"], "center": ["featurePanel", "sequencePanel"]}, {"title": "LSTM 순차 처리", "desc": "완성된 sequence가 LSTM으로 입력되고 Gate가 활성화된다.", "active": ["sequencePanel", "lstm", "lstmGate"], "routes": ["sequenceToLstm", "lstmToGate"], "center": ["sequencePanel", "lstm", "lstmGate"]}, {"title": "Dense Layer 변환", "desc": "LSTM의 최종 hidden state가 Dense(1)로 전달된다.", "active": ["lstm", "dense", "lstmGate"], "routes": ["lstmToDense"], "center": ["lstm", "dense"]}, {"title": "Prediction 출력", "desc": "Predicted power_kw, Actual power_kw, Error를 동시에 표시한다.", "active": ["dense", "prediction"], "routes": ["denseToPrediction"], "center": ["dense", "prediction"]}, {"title": "성능 평가", "desc": "MAE, RMSE, Baseline과의 비교를 통해 LSTM 성능을 요약한다.", "active": ["prediction", "evaluation"], "routes": ["predictionToEvaluation"], "center": ["prediction", "evaluation"]}];
+const ROUTES = {"weatherToHourly": [[330, 150], [520, 150]], "rp2040ToRealtime": [[330, 370], [520, 370]], "realtimeToHourly": [[780, 370], [940, 370]], "weatherToJoin": [[650, 230], [650, 285], [880, 285], [880, 650], [820, 650]], "powerToJoin": [[1070, 450], [1070, 500], [930, 500], [930, 650], [820, 650]], "joinToFeature": [[820, 650], [970, 650]], "featureToSequence": [[1180, 765], [1180, 805], [390, 805], [390, 860]], "sequenceToLstm": [[520, 1040], [520, 950], [800, 950]], "lstmToDense": [[1070, 920], [1200, 920]], "denseToPrediction": [[1460, 920], [1590, 920]], "predictionToEvaluation": [[1900, 920], [2000, 920]], "lstmToGate": [[935, 980], [935, 1075]]};
+const MERGE_POINT = [820, 650];
+const BLOCK_IDS = ["weatherApi", "weatherHourly", "rp2040", "powerRealtime", "powerHourly", "timeJoin", "featurePanel", "sequencePanel", "lstm", "lstmGate", "dense", "prediction", "evaluation"];
+
+const state = { current: 0, playing: false, timer: null, seqTimer: null, gateTimer: null, animFrames: [] };
+
+const els = {
+  stageNumber: document.getElementById('stageNumber'),
+  stageTitle: document.getElementById('stageTitle'),
+  stageDesc: document.getElementById('stageDesc'),
+  speedRange: document.getElementById('speedRange'),
+  speedLabel: document.getElementById('speedLabel'),
+  diagramShell: document.getElementById('diagramShell'),
+  pathsLayer: document.getElementById('pathsLayer'),
+  predValue: document.getElementById('predValue'),
+  actualValue: document.getElementById('actualValue'),
+  errorValue: document.getElementById('errorValue'),
+  maeValue: document.getElementById('maeValue'),
+  rmseValue: document.getElementById('rmseValue'),
+  baselineValue: document.getElementById('baselineValue'),
+  improveValue: document.getElementById('improveValue'),
+  predBar: document.getElementById('predBar'),
+  actualBar: document.getElementById('actualBar'),
+  compareBox: document.getElementById('compareBox'),
+  weatherReady: document.getElementById('weatherReady'),
+  realtimeReady: document.getElementById('realtimeReady'),
+  powerReady: document.getElementById('powerReady'),
+  joinedReady: document.getElementById('joinedReady'),
+  vectorStatus: document.getElementById('vectorStatus'),
+  sequenceStatus: document.getElementById('sequenceStatus'),
+  joinConditions: document.getElementById('joinConditions'),
+  gateNote: document.getElementById('gateNote'),
+  sequenceCounter: document.getElementById('sequenceCounter'),
+  seqGrid: document.getElementById('seqGrid')
+};
+
+const packets = {
+  weather: [document.getElementById('packetWeather'), document.getElementById('labelWeather')],
+  power: [document.getElementById('packetPower'), document.getElementById('labelPower')],
+  joined: [document.getElementById('packetJoined'), document.getElementById('labelJoined')],
+  vector: [document.getElementById('packetVector'), document.getElementById('labelVector')],
+  sequence: [document.getElementById('packetSequence'), document.getElementById('labelSequence')],
+  pred: [document.getElementById('packetPred'), document.getElementById('labelPred')]
+};
+
+const gates = [...document.querySelectorAll('.gate')];
+const seqCells = [];
+const routePathEls = {};
+
+function initSequenceGrid() {
+  for (let i = 0; i < 35; i++) {
+    const c = document.createElement('div');
+    c.className = 'seq-cell';
+    if (i === 0) c.textContent = 't-35';
+    else if (i === 17) c.textContent = '...';
+    else if (i === 34) c.textContent = 't-1';
+    els.seqGrid.appendChild(c);
+    seqCells.push(c);
+  }
+}
+
+function routeToPath(points) {
+  return points.map((pt, idx) => `${idx === 0 ? 'M' : 'L'}${pt[0]},${pt[1]}`).join(' ');
+}
+
+function renderPaths() {
+  Object.entries(ROUTES).forEach(([name, points]) => {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('id', `path-${name}`);
+    path.setAttribute('class', 'path');
+    path.setAttribute('d', routeToPath(points));
+    path.setAttribute('marker-end', 'url(#arrow)');
+    els.pathsLayer.appendChild(path);
+    routePathEls[name] = path;
+  });
+}
+
+function setPos(el, x, y) {
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+}
+
+function hideAllPackets() {
+  Object.values(packets).forEach(([p, l]) => {
+    p.classList.remove('show');
+    l.classList.remove('show');
+  });
+}
+
+function clearAnimations() {
+  if (state.seqTimer) clearInterval(state.seqTimer);
+  if (state.gateTimer) clearInterval(state.gateTimer);
+  state.seqTimer = null;
+  state.gateTimer = null;
+  state.animFrames.forEach(id => cancelAnimationFrame(id));
+  state.animFrames = [];
+  hideAllPackets();
+}
+
+function animateToken(packetType, routeName, labelText, options = {}) {
+  const points = ROUTES[routeName];
+  const [packetEl, labelEl] = packets[packetType];
+
+  return new Promise(resolve => {
+    if (!points || points.length < 2) {
+      resolve();
+      return;
+    }
+
+    packetEl.classList.remove('merge-out', 'merge-in-start', 'merge-in-final');
+    packetEl.classList.add('show');
+    labelEl.classList.add('show');
+    labelEl.textContent = labelText || '';
+
+    let segment = 0;
+    let frameNo = 0;
+    const framesPerSegment = Math.max(18, Math.round(52 / parseFloat(els.speedRange.value)));
+
+    function step() {
+      const a = points[segment];
+      const b = points[segment + 1];
+      const p = Math.min(1, frameNo / framesPerSegment);
+      const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+      const x = a[0] + (b[0] - a[0]) * ease;
+      const y = a[1] + (b[1] - a[1]) * ease;
+
+      setPos(packetEl, x, y);
+      setPos(labelEl, x, y);
+      frameNo += 1;
+
+      if (p < 1) {
+        state.animFrames.push(requestAnimationFrame(step));
+      } else if (segment < points.length - 2) {
+        segment += 1;
+        frameNo = 0;
+        state.animFrames.push(requestAnimationFrame(step));
+      } else {
+        if (options.keepVisible) {
+          labelEl.classList.remove('show');
+          resolve();
+        } else {
+          setTimeout(() => {
+            packetEl.classList.remove('show');
+            labelEl.classList.remove('show');
+            resolve();
+          }, 260);
+        }
+      }
+    }
+
+    state.animFrames.push(requestAnimationFrame(step));
+  });
+}
+
+function mergeTokensToJoinedPacket() {
+  const [weatherPacket, weatherLabel] = packets.weather;
+  const [powerPacket, powerLabel] = packets.power;
+  const [joinedPacket, joinedLabel] = packets.joined;
+
+  return new Promise(resolve => {
+    const [mx, my] = MERGE_POINT;
+
+    setPos(weatherPacket, mx - 10, my);
+    setPos(powerPacket, mx + 10, my);
+    weatherLabel.classList.remove('show');
+    powerLabel.classList.remove('show');
+
+    weatherPacket.classList.add('merge-out');
+    powerPacket.classList.add('merge-out');
+
+    setTimeout(() => {
+      weatherPacket.classList.remove('show', 'merge-out');
+      powerPacket.classList.remove('show', 'merge-out');
+
+      setPos(joinedPacket, mx, my);
+      setPos(joinedLabel, mx, my);
+      joinedLabel.textContent = 'joinedPacket created';
+      joinedPacket.classList.add('show', 'merge-in-start');
+      joinedLabel.classList.add('show');
+
+      requestAnimationFrame(() => {
+        joinedPacket.classList.remove('merge-in-start');
+        joinedPacket.classList.add('merge-in-final');
+      });
+
+      setTimeout(() => {
+        joinedPacket.classList.remove('merge-in-final');
+        joinedPacket.classList.add('merge-out');
+        joinedLabel.classList.remove('show');
+
+        setTimeout(() => {
+          joinedPacket.classList.remove('show', 'merge-out');
+          resolve();
+        }, 280);
+      }, 360);
+    }, 300);
+  });
+}
+
+function resetOutputs() {
+  els.predValue.textContent = '-';
+  els.actualValue.textContent = '-';
+  els.errorValue.textContent = '-';
+  els.maeValue.textContent = '-';
+  els.rmseValue.textContent = '-';
+  els.baselineValue.textContent = '-';
+  els.improveValue.textContent = '-';
+  els.predBar.style.width = '0%';
+  els.actualBar.style.width = '0%';
+  els.compareBox.textContent = 'Baseline 대비 LSTM이 더 낮은 오차를 보인다.';
+}
+
+function fillOutputs(idx) {
+  if (idx >= 8) {
+    els.predValue.textContent = '2.184 kW';
+    els.actualValue.textContent = '2.210 kW';
+    els.errorValue.textContent = '0.026 kW';
+    els.predBar.style.width = '86%';
+    els.actualBar.style.width = '88%';
+  }
+  if (idx >= 9) {
+    els.maeValue.textContent = '0.084 kW';
+    els.rmseValue.textContent = '0.112 kW';
+    els.baselineValue.textContent = '0.137 kW';
+    els.improveValue.textContent = '38.7%';
+    els.compareBox.textContent = 'LSTM MAE 0.084 kW는 Baseline MAE 0.137 kW보다 낮다. 예시 기준으로 오차가 약 38.7% 개선된다.';
+  }
+}
+
+function updateStatusBadges(idx) {
+  els.weatherReady.classList.toggle('show', idx >= 0);
+  els.realtimeReady.classList.toggle('show', idx >= 1);
+  els.powerReady.classList.toggle('show', idx >= 2);
+  els.joinConditions.classList.toggle('show', idx >= 3);
+  els.joinedReady.classList.toggle('show', idx > 3);
+  els.vectorStatus.classList.toggle('show', idx >= 4);
+  els.sequenceStatus.classList.toggle('show', idx >= 5);
+}
+
+function animateSequenceFill(count, gradual) {
+  els.sequenceCounter.textContent = gradual ? '0 / 35' : `${count} / 35`;
+  seqCells.forEach(el => el.classList.remove('fill'));
+  if (!gradual) {
+    seqCells.forEach((el, i) => el.classList.toggle('fill', i < count));
+    return;
+  }
+  let i = 0;
+  state.seqTimer = setInterval(() => {
+    if (i < count) {
+      seqCells[i].classList.add('fill');
+      els.sequenceCounter.textContent = `${i + 1} / 35`;
+    }
+    i += 1;
+    if (i >= count) clearInterval(state.seqTimer);
+  }, 65 / parseFloat(els.speedRange.value));
+}
+
+function resetGates() {
+  if (state.gateTimer) clearInterval(state.gateTimer);
+  state.gateTimer = null;
+  gates.forEach(g => {
+    g.classList.remove('active');
+    g.querySelector('.bar').classList.remove('on');
+  });
+  els.gateNote.innerHTML = 'Gate가 순서대로 활성화되며 장기 기억을 유지한다.';
+}
+
+function setGatesCompletedStatic() {
+  if (state.gateTimer) clearInterval(state.gateTimer);
+  state.gateTimer = null;
+  gates.forEach(g => {
+    g.classList.add('active');
+    g.querySelector('.bar').classList.add('on');
+  });
+  els.gateNote.innerHTML = 'Gate processing complete<br>Final hidden state ready';
+}
+
+function animateGatesOnce() {
+  resetGates();
+
+  const texts = ['Forget Gate 활성화', 'Input Gate 활성화', 'Cell State 업데이트', 'Output Gate 활성화'];
+  let i = 0;
+
+  state.gateTimer = setInterval(() => {
+    if (i > 0) {
+      gates[i - 1].classList.remove('active');
+      gates[i - 1].querySelector('.bar').classList.remove('on');
+    }
+
+    if (i < gates.length) {
+      gates[i].classList.add('active');
+      gates[i].querySelector('.bar').classList.add('on');
+      els.gateNote.textContent = texts[i];
+      i += 1;
+    } else {
+      clearInterval(state.gateTimer);
+      state.gateTimer = null;
+      setGatesCompletedStatic();
+    }
+  }, 380 / parseFloat(els.speedRange.value));
+}
+
+function updateGateStateForStage(idx) {
+  if (idx < 6) {
+    resetGates();
+  } else if (idx === 6) {
+    animateGatesOnce();
+  } else {
+    setGatesCompletedStatic();
+  }
+}
+
+function scrollActiveToCenter(activeIds) {
+  const xs = [];
+  activeIds.forEach(id => {
+    const p = BLOCK_POSITIONS[id];
+    if (p) xs.push(p.x + p.w / 2);
+  });
+  if (!xs.length) return;
+  const center = xs.reduce((a, b) => a + b, 0) / xs.length;
+  const target = Math.max(0, center - els.diagramShell.clientWidth / 2);
+  els.diagramShell.scrollTo({ left: target, behavior: 'smooth' });
+}
+
+function hasAppearedBefore(id, idx) {
+  for (let i = 0; i < idx; i++) {
+    if (STAGES[i].active.includes(id)) return true;
+  }
+  return false;
+}
+
+function updateRouteHighlight(routeNames) {
+  Object.entries(routePathEls).forEach(([name, el]) => {
+    const on = routeNames.includes(name);
+    el.classList.toggle('active', on);
+    el.setAttribute('marker-end', on ? 'url(#arrowActive)' : 'url(#arrow)');
+  });
+}
+
+async function runJoinStage() {
+  await Promise.all([
+    animateToken('weather', 'weatherToJoin', 'weather row → Time Join', { keepVisible: true }),
+    animateToken('power', 'powerToJoin', 'power row → Time Join', { keepVisible: true })
+  ]);
+
+  await mergeTokensToJoinedPacket();
+  els.joinedReady.classList.add('show');
+}
+
+async function runStageAnimation(idx) {
+  if (idx < 5) {
+    seqCells.forEach(el => el.classList.remove('fill'));
+    els.sequenceCounter.textContent = '0 / 35';
+  }
+  if (idx === 5) animateSequenceFill(35, true);
+  else if (idx > 5) animateSequenceFill(35, false);
+
+  updateGateStateForStage(idx);
+  fillOutputs(idx);
+
+  if (idx === 0) {
+    await animateToken('weather', 'weatherToHourly', 'weatherPacket: temp=23.4, humidity=61, wind=2.1');
+  } else if (idx === 1) {
+    await animateToken('power', 'rp2040ToRealtime', 'powerPacket: power_kw=2.04, panel_temp=31.2');
+  } else if (idx === 2) {
+    await animateToken('power', 'realtimeToHourly', 'powerPacket: AVG(power_kw)=2.04 @ 14:00');
+  } else if (idx === 3) {
+    await runJoinStage();
+  } else if (idx === 4) {
+    await animateToken('joined', 'joinToFeature', 'joined row → 8-feature vector');
+  } else if (idx === 5) {
+    await animateToken('vector', 'featureToSequence', 'vector → sequence buffer');
+  } else if (idx === 6) {
+    await animateToken('sequence', 'sequenceToLstm', 'sequencePacket enters LSTM');
+  } else if (idx === 7) {
+    await animateToken('sequence', 'lstmToDense', 'hidden state → Dense(1)');
+  } else if (idx === 8) {
+    await animateToken('pred', 'denseToPrediction', 'predicted power_kw = 2.184');
+  } else if (idx === 9) {
+    await animateToken('pred', 'predictionToEvaluation', 'MAE=0.084, RMSE=0.112');
+  }
+}
+
+function setStage(idx) {
+  clearAnimations();
+  state.current = Math.max(0, Math.min(STAGES.length - 1, idx));
+  const s = STAGES[state.current];
+
+  els.stageNumber.textContent = `STEP ${state.current + 1} / ${STAGES.length}`;
+  els.stageTitle.textContent = s.title;
+  els.stageDesc.textContent = s.desc;
+
+  BLOCK_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('active', 'done');
+    if (s.active.includes(id)) el.classList.add('active');
+    else if (hasAppearedBefore(id, state.current)) el.classList.add('done');
+  });
+
+  updateRouteHighlight(s.routes);
+  document.querySelectorAll('.feature').forEach((el, i) => el.classList.toggle('active', i < 8 && state.current >= 4));
+  resetOutputs();
+  updateStatusBadges(state.current);
+  scrollActiveToCenter(s.center || s.active);
+  runStageAnimation(state.current);
+}
+
+function nextStage() {
+  if (state.current < STAGES.length - 1) setStage(state.current + 1);
+  else {
+    state.playing = false;
+    document.getElementById('playBtn').textContent = '자동 재생';
+    clearInterval(state.timer);
+  }
+}
+
+function togglePlay() {
+  state.playing = !state.playing;
+  document.getElementById('playBtn').textContent = state.playing ? '일시정지' : '자동 재생';
+  clearInterval(state.timer);
+  if (state.playing) {
+    const interval = Math.round(3200 / parseFloat(els.speedRange.value));
+    state.timer = setInterval(nextStage, interval);
+  }
+}
+
+document.getElementById('playBtn').addEventListener('click', togglePlay);
+document.getElementById('nextBtn').addEventListener('click', () => { clearInterval(state.timer); state.playing = false; document.getElementById('playBtn').textContent = '자동 재생'; nextStage(); });
+document.getElementById('prevBtn').addEventListener('click', () => { clearInterval(state.timer); state.playing = false; document.getElementById('playBtn').textContent = '자동 재생'; setStage(state.current - 1); });
+document.getElementById('resetBtn').addEventListener('click', () => { clearInterval(state.timer); state.playing = false; document.getElementById('playBtn').textContent = '자동 재생'; setStage(0); });
+els.speedRange.addEventListener('input', () => {
+  els.speedLabel.textContent = `${parseFloat(els.speedRange.value).toFixed(1)}x`;
+  if (state.playing) {
+    clearInterval(state.timer);
+    const interval = Math.round(3200 / parseFloat(els.speedRange.value));
+    state.timer = setInterval(nextStage, interval);
+  }
+});
+
+initSequenceGrid();
+renderPaths();
+setStage(0);
+</script>
+</body>
+</html>
